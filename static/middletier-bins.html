@@ -1,0 +1,1031 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bin Migration Simulator</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-dim: #8b949e;
+    --danger: #f85149;
+    --migrating: #d29922;
+    --accent: #58a6ff;
+    --drain: #f0883e;
+    --warm: #3fb950;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+    padding: 24px;
+  }
+
+  h1 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 4px;
+    letter-spacing: -0.5px;
+  }
+
+  .subtitle { color: var(--text-dim); font-size: 13px; margin-bottom: 20px; }
+
+  .panel {
+    margin-bottom: 12px;
+    padding: 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+
+  .panel-row {
+    display: flex;
+    gap: 14px;
+    align-items: flex-end;
+    flex-wrap: wrap;
+  }
+
+  .control-group { display: flex; flex-direction: column; gap: 4px; }
+
+  .control-group label {
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .control-group input {
+    width: 100px;
+    padding: 6px 10px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+  }
+
+  .control-group input:focus { outline: none; border-color: var(--accent); }
+
+  button {
+    padding: 8px 16px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  button:hover:not(:disabled) { transform: translateY(-1px); }
+  button:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+
+  .btn-primary { background: var(--accent); color: var(--bg); border-color: var(--accent); font-weight: 600; }
+  .btn-next { background: var(--drain); color: var(--bg); border-color: var(--drain); font-weight: 600; font-size: 14px; padding: 10px 24px; }
+  .btn-reset { background: transparent; color: var(--danger); border-color: var(--danger); }
+  .btn-add { background: var(--warm); color: var(--bg); border-color: var(--warm); font-weight: 600; }
+  .btn-remove {
+    background: transparent; color: var(--danger); border: none;
+    font-size: 18px; padding: 2px 6px; cursor: pointer; opacity: 0.5;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .btn-remove:hover { opacity: 1; }
+
+  .mode-toggle {
+    display: flex;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+    align-self: flex-end;
+  }
+  .mode-toggle button {
+    border: none;
+    border-radius: 0;
+    padding: 7px 14px;
+    font-size: 12px;
+    background: transparent;
+    color: var(--text-dim);
+    font-weight: 600;
+    transition: all 0.15s;
+  }
+  .mode-toggle button:hover:not(:disabled) { transform: none; }
+  .mode-toggle button.active {
+    background: var(--accent);
+    color: var(--bg);
+  }
+
+  .section-title {
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 10px;
+    display: block;
+  }
+
+  .pool-list { max-height: 200px; overflow-y: auto; margin-bottom: 10px; }
+
+  .pool-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .pool-row:last-child { border-bottom: none; }
+  .pool-color { width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0; }
+  .pool-name {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 600;
+    min-width: 80px;
+  }
+  .pool-info { font-size: 12px; color: var(--text-dim); flex: 1; font-family: 'JetBrains Mono', monospace; }
+
+  .phase-banner {
+    padding: 10px 16px;
+    border-radius: 6px;
+    margin-bottom: 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .phase-banner.idle { background: #161b22; border: 1px solid var(--border); color: var(--text-dim); }
+  .phase-banner.warmup { background: #2a2004; border: 1px solid var(--migrating); color: var(--migrating); }
+  .phase-banner.ready { background: #0d2818; border: 1px solid var(--warm); color: var(--warm); }
+  .phase-banner.done { background: #0d2818; border: 1px solid var(--warm); color: var(--warm); }
+
+  .summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+
+  .summary-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    text-align: center;
+  }
+
+  .summary-value { font-family: 'JetBrains Mono', monospace; font-size: 22px; font-weight: 700; }
+  .summary-label { font-size: 10px; color: var(--text-dim); margin-top: 2px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  .legend {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-dim);
+  }
+
+  .legend-swatch { width: 12px; height: 12px; border-radius: 2px; }
+
+  .fleet-container {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+
+  .node-card {
+    background: var(--surface);
+    border: 2px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    min-width: 110px;
+    flex: 1;
+    max-width: 170px;
+    transition: all 0.3s;
+  }
+
+  .node-card.draining { border-color: var(--drain); background: #1c1206; }
+  .node-card.replacement { border-color: var(--accent); border-style: dashed; }
+
+  .node-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
+  .node-name { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; }
+
+  .node-status {
+    font-size: 9px;
+    font-family: 'JetBrains Mono', monospace;
+    padding: 2px 5px;
+    border-radius: 3px;
+    font-weight: 600;
+  }
+
+  .s-ready { background: #0d2818; color: var(--warm); }
+  .s-draining { background: #2a1a04; color: var(--drain); }
+  .s-new { background: #0d1a2e; color: var(--accent); }
+
+  .capacity-bar {
+    display: flex;
+    height: 5px;
+    background: var(--bg);
+    border-radius: 3px;
+    margin-bottom: 5px;
+    overflow: hidden;
+  }
+
+  .cap-seg { height: 100%; transition: width 0.4s ease; }
+
+  .capacity-text { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text-dim); margin-bottom: 3px; }
+
+  .bins-grid { display: flex; flex-wrap: wrap; gap: 2px; }
+
+  .bin {
+    width: 14px;
+    height: 14px;
+    border-radius: 2px;
+    font-size: 7px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    color: rgba(0,0,0,0.5);
+    transition: all 0.3s;
+  }
+
+  .bin.empty-slot { background: var(--border); opacity: 0.3; }
+  .bin.migrating { animation: pulse 1.5s infinite; }
+
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+  .log-label {
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+  }
+
+  .log {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    max-height: 280px;
+    overflow-y: auto;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    line-height: 1.7;
+  }
+
+  .log-entry { color: var(--text-dim); }
+  .log-entry.drain { color: var(--drain); }
+  .log-entry.warm { color: var(--warm); }
+  .log-entry.info { color: var(--accent); }
+  .log-entry.bold { font-weight: 700; }
+</style>
+</head>
+<body>
+
+<h1>Bin Migration Upgrade Simulator</h1>
+<p class="subtitle">Bin migration during K8s rolling upgrades</p>
+
+<div class="panel">
+  <span class="section-title">Fleet Configuration</span>
+  <div class="panel-row">
+    <div class="mode-toggle" id="modeToggle">
+      <button class="active" onclick="setMode('simple')">Simple</button>
+      <button onclick="setMode('multi')">Multi-Pool</button>
+    </div>
+    <div class="control-group">
+      <label>Nodes</label>
+      <input type="number" id="numNodes" value="5" min="2" max="30">
+    </div>
+    <div class="control-group">
+      <label>Instance (GiB)</label>
+      <input type="number" id="instanceSize" value="1120" min="16" max="10000">
+    </div>
+    <div class="control-group">
+      <label>Bin Size (GiB)</label>
+      <input type="number" id="binSize" value="16" min="1" max="64">
+    </div>
+    <div class="control-group">
+      <label>Reserve %</label>
+      <input type="number" id="reservePct" value="15" min="0" max="50">
+    </div>
+    <div class="control-group">
+      <label>Net MB/s</label>
+      <input type="number" id="netSpeed" value="260" min="50" max="5000">
+    </div>
+    <button class="btn-primary" onclick="initFleet()">Initialize</button>
+    <button class="btn-next" onclick="nextStep()" id="nextBtn" disabled>Next Step</button>
+    <button class="btn-reset" onclick="resetAll()">Reset</button>
+  </div>
+</div>
+
+<div class="panel" id="poolPanel" style="display:none">
+  <span class="section-title">Pools</span>
+  <div id="poolList" class="pool-list"></div>
+  <div class="panel-row">
+    <div class="control-group">
+      <label>Name</label>
+      <input type="text" id="poolName" value="Pool A" style="width:110px">
+    </div>
+    <div class="control-group">
+      <label>Size (GiB)</label>
+      <input type="number" id="poolSize" value="800" min="1">
+    </div>
+    <button class="btn-add" onclick="addPool()">Add Pool</button>
+  </div>
+</div>
+
+<div id="phaseBanner" class="phase-banner idle">Click Initialize to set up the fleet</div>
+
+<div class="summary" id="summary"></div>
+
+<div class="legend" id="legend"></div>
+
+<div class="fleet-container" id="fleet"></div>
+
+<div class="log-label">Event Log</div>
+<div class="log" id="log"></div>
+
+<script>
+const POOL_COLORS = [
+  '#58a6ff', '#f0883e', '#bc8cff', '#3fb950', '#f85149',
+  '#d29922', '#db61a2', '#56d4dd', '#e3b341', '#79c0ff',
+  '#39d353', '#a371f7',
+];
+
+const PHASES = ['start-drain', 'complete-warmup'];
+
+let S = {
+  nodes: [],
+  pools: [],
+  cfg: {},
+  drainIdx: 0,
+  stepIdx: 0,
+  stats: { drains: 0, warmMigrations: 0, warmupTimes: [], lastDrainInfo: null },
+  rounds: 0,
+  poolIdCounter: 0,
+  initialized: false,
+  mode: 'simple',
+};
+
+function setMode(m) {
+  if (S.mode === m) return;
+  S.mode = m;
+  const btns = document.getElementById('modeToggle').children;
+  btns[0].className = m === 'simple' ? 'active' : '';
+  btns[1].className = m === 'multi' ? 'active' : '';
+  document.getElementById('poolPanel').style.display = m === 'multi' ? '' : 'none';
+  if (S.initialized) resetAll();
+  else setBanner('idle', m === 'simple'
+    ? 'Click Initialize to set up the fleet'
+    : 'Click Initialize to set up the fleet, then add pools');
+}
+
+// ─── Scheduler (port of scheduler.go) ─────────────────────
+
+function selectHosts(currentBins, available, targetCount) {
+  if (targetCount >= available.length) return [...available].sort();
+  const scores = available.map(h => ({ name: h, count: (currentBins[h] || []).length }));
+  scores.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  return scores.slice(0, targetCount).map(s => s.name).sort();
+}
+
+function computeBinPlacement(input) {
+  const { desiredBinCount, currentBins = {}, availableHosts = [], drainingHosts = [], hostCapacities } = input;
+
+  if (availableHosts.length === 0) {
+    return { assignments: {}, migrations: [], degraded: true };
+  }
+
+  let degraded = false;
+  const selectedHosts = selectHosts(currentBins, availableHosts, availableHosts.length);
+  const selectedSet = new Set(selectedHosts);
+  const desiredCount = Math.max(0, desiredBinCount);
+
+  const idealPerHost = {};
+  if (selectedHosts.length > 0) {
+    const base = Math.floor(desiredCount / selectedHosts.length);
+    const remainder = desiredCount % selectedHosts.length;
+    selectedHosts.forEach((h, i) => {
+      idealPerHost[h] = base + (i < remainder ? 1 : 0);
+    });
+  }
+
+  if (hostCapacities) {
+    for (const h in idealPerHost) {
+      if (h in hostCapacities && idealPerHost[h] > hostCapacities[h]) {
+        idealPerHost[h] = Math.max(0, Math.floor(hostCapacities[h]));
+        degraded = true;
+      }
+    }
+  }
+
+  const currentLocation = {};
+  for (const [host, bins] of Object.entries(currentBins)) {
+    for (const b of bins) currentLocation[b] = host;
+  }
+
+  const allBins = Object.keys(currentLocation).map(Number).sort((a, b) => a - b);
+  const keptBins = allBins.slice(0, desiredCount);
+  const keptSet = new Set(keptBins);
+
+  const newAssignments = {};
+  for (const h of selectedHosts) newAssignments[h] = [];
+
+  const hostCount = {};
+  for (const h of selectedHosts) hostCount[h] = 0;
+  const placed = new Set();
+
+  // Phase 1: Keep bins already on a selected host within ideal count
+  for (const b of keptBins) {
+    const host = currentLocation[b];
+    if (selectedSet.has(host) && hostCount[host] < idealPerHost[host]) {
+      newAssignments[host].push(b);
+      hostCount[host]++;
+      placed.add(b);
+    }
+  }
+
+  // Phase 2: Collect displaced bins
+  const displaced = keptBins.filter(b => !placed.has(b)).sort((a, b) => a - b);
+
+  // Phase 3: Assign displaced to underloaded hosts
+  let di = 0;
+  for (const h of selectedHosts) {
+    while (hostCount[h] < idealPerHost[h] && di < displaced.length) {
+      newAssignments[h].push(displaced[di]);
+      hostCount[h]++;
+      di++;
+    }
+  }
+
+  // Phase 4: Create new bins if growing
+  let nextBinId = allBins.length > 0 ? allBins[allBins.length - 1] + 1 : 0;
+  for (const h of selectedHosts) {
+    while (hostCount[h] < idealPerHost[h]) {
+      newAssignments[h].push(nextBinId);
+      hostCount[h]++;
+      nextBinId++;
+    }
+  }
+
+  for (const h in newAssignments) {
+    newAssignments[h].sort((a, b) => a - b);
+  }
+
+  // Migrations: bins that moved off a draining host
+  const drainingSet = new Set(drainingHosts);
+  const migrations = [];
+  for (const [host, bins] of Object.entries(newAssignments)) {
+    for (const b of bins) {
+      const oldHost = currentLocation[b];
+      if (oldHost && oldHost !== host && drainingSet.has(oldHost)) {
+        migrations.push({ bin: b, from: oldHost, to: host });
+      }
+    }
+  }
+
+  for (const h in newAssignments) {
+    if (newAssignments[h].length === 0) delete newAssignments[h];
+  }
+
+  return { assignments: newAssignments, migrations, degraded };
+}
+
+// ─── Pool Management ──────────────────────────────────────
+
+function addPool() {
+  const name = document.getElementById('poolName').value.trim() || nextPoolName();
+  const sizeGiB = parseInt(document.getElementById('poolSize').value) || 160;
+
+  const pool = {
+    id: 'pool-' + S.poolIdCounter++,
+    name,
+    sizeGiB,
+    color: POOL_COLORS[(S.poolIdCounter - 1) % POOL_COLORS.length],
+    assignments: {},
+    migratingBins: new Set(),
+  };
+
+  S.pools.push(pool);
+
+  if (S.initialized) {
+    schedulePool(pool, false);
+    const binGiB = S.cfg.binGiB;
+    log('info bold', `Pool "${name}" added: ${sizeGiB} GiB (${Math.ceil(sizeGiB / binGiB)} bins)`);
+    render();
+  }
+
+  renderPoolList();
+  document.getElementById('poolName').value = nextPoolName();
+}
+
+function removePool(poolId) {
+  S.pools = S.pools.filter(p => p.id !== poolId);
+  renderPoolList();
+  if (S.initialized) {
+    log('info', `Pool removed`);
+    render();
+  }
+  document.getElementById('poolName').value = nextPoolName();
+}
+
+function schedulePool(pool, isDrain) {
+  const binCount = Math.ceil(pool.sizeGiB / S.cfg.binGiB);
+
+  const availableHosts = S.nodes
+    .filter(n => n.status === 'ready')
+    .map(n => n.name);
+  const drainingHosts = S.nodes
+    .filter(n => n.status === 'draining')
+    .map(n => n.name);
+
+  const otherBins = {};
+  for (const n of S.nodes) otherBins[n.name] = 0;
+  for (const p of S.pools) {
+    if (p.id === pool.id) continue;
+    for (const [host, bins] of Object.entries(p.assignments)) {
+      otherBins[host] = (otherBins[host] || 0) + bins.length;
+    }
+  }
+
+  const baseCap = isDrain ? S.cfg.cap : S.cfg.effectiveCap;
+  const hostCapacities = {};
+  for (const n of S.nodes) {
+    hostCapacities[n.name] = Math.max(0, baseCap - (otherBins[n.name] || 0));
+  }
+
+  const result = computeBinPlacement({
+    desiredBinCount: binCount,
+    currentBins: pool.assignments,
+    availableHosts,
+    drainingHosts,
+    hostCapacities,
+  });
+
+  pool.assignments = result.assignments;
+  return result;
+}
+
+function scheduleAllPools(isDrain) {
+  const results = [];
+  for (const pool of S.pools) {
+    results.push({ pool, result: schedulePool(pool, isDrain) });
+  }
+  return results;
+}
+
+function nextPoolName() {
+  const used = new Set(S.pools.map(p => p.name));
+  for (let i = 0; i < 26; i++) {
+    const name = 'Pool ' + String.fromCharCode(65 + i);
+    if (!used.has(name)) return name;
+  }
+  return 'Pool ' + (S.pools.length + 1);
+}
+
+// ─── Fleet Init ───────────────────────────────────────────
+
+function initFleet() {
+  const n = parseInt(document.getElementById('numNodes').value) || 5;
+  const instanceGiB = parseInt(document.getElementById('instanceSize').value) || 1120;
+  const binGiB = parseInt(document.getElementById('binSize').value) || 16;
+  const reservePct = parseInt(document.getElementById('reservePct').value) || 15;
+  const netMBs = parseInt(document.getElementById('netSpeed').value) || 260;
+
+  const cap = Math.floor(instanceGiB / binGiB);
+  const effectiveCap = Math.floor(cap * (1 - reservePct / 100));
+
+  S.cfg = { n, instanceGiB, binGiB, reservePct, netMBs, cap, effectiveCap };
+  S.nodes = [];
+  S.drainIdx = 0;
+  S.stepIdx = 0;
+  S.stats = { drains: 0, warmMigrations: 0, warmupTimes: [], lastDrainInfo: null };
+  S.rounds = 0;
+  S.initialized = true;
+
+  for (let i = 0; i < n; i++) {
+    S.nodes.push({ name: `fleet-${i}`, status: 'ready', isNew: false });
+  }
+
+  if (S.mode === 'simple') {
+    S.pools = [];
+    S.poolIdCounter = 0;
+    const totalGiB = effectiveCap * n * binGiB;
+    S.pools.push({
+      id: 'pool-' + S.poolIdCounter++,
+      name: 'Cache',
+      sizeGiB: totalGiB,
+      color: '#3fb950',
+      assignments: {},
+      migratingBins: new Set(),
+    });
+  }
+
+  for (const pool of S.pools) {
+    pool.assignments = {};
+    pool.migratingBins = new Set();
+  }
+  scheduleAllPools(false);
+
+  clearLog();
+  const totalPoolBins = S.pools.reduce((s, p) => s + Math.ceil(p.sizeGiB / binGiB), 0);
+  const usedPerNode = totalPoolBins > 0 ? (totalPoolBins / n).toFixed(1) : '0';
+  log('info bold', `Fleet initialized`);
+  log('info', `  ${n} nodes, ${instanceGiB} GiB/node → ${cap} bin slots/node`);
+  log('info', `  Reserve ${reservePct}% → effective cap: ${effectiveCap} bins/node`);
+  if (S.mode === 'simple') {
+    log('info', `  ${totalPoolBins} total bins (${effectiveCap}/node)`);
+  } else {
+    log('info', `  ${S.pools.length} pool(s), ${totalPoolBins} total bins (~${usedPerNode}/node)`);
+  }
+  log('info', `  Throughput: ${netMBs} MB/s, bin size: ${binGiB} GiB`);
+
+  if (S.mode === 'simple') {
+    setBanner('ready', `Ready. Click "Next Step" to drain fleet-0`);
+  } else {
+    setBanner('ready', S.pools.length > 0
+      ? `Ready. Click "Next Step" to drain fleet-0`
+      : `Fleet ready (empty). Add pools to fill capacity, then drain`);
+  }
+  document.getElementById('nextBtn').disabled = false;
+  document.getElementById('nextBtn').textContent = 'Drain fleet-0';
+
+  renderPoolList();
+  render();
+}
+
+// ─── Drain / Warm-up Flow ─────────────────────────────────
+
+function nextStep() {
+  const phase = PHASES[S.stepIdx % 2];
+
+  if (phase === 'start-drain') {
+    if (S.drainIdx >= S.cfg.n) { finish(); render(); return; }
+    doDrain();
+  } else if (phase === 'complete-warmup') {
+    doWarmupComplete();
+    if (S.drainIdx >= S.cfg.n) { finish(); render(); return; }
+  }
+
+  S.stepIdx++;
+  render();
+}
+
+function doDrain() {
+  const node = S.nodes[S.drainIdx];
+  node.status = 'draining';
+  S.stats.drains++;
+
+  // Snapshot old assignments so we can detect ALL bins that changed host
+  const oldLocations = {};
+  for (const pool of S.pools) {
+    const loc = {};
+    for (const [host, bins] of Object.entries(pool.assignments)) {
+      for (const b of bins) loc[b] = host;
+    }
+    oldLocations[pool.id] = loc;
+  }
+
+  const results = scheduleAllPools(true);
+
+  const targetBins = {};
+  let totalMigrated = 0;
+
+  log('drain bold', `── DRAIN ${node.name} ──`);
+
+  for (const { pool, result } of results) {
+    const oldLoc = oldLocations[pool.id];
+    const moved = [];
+
+    // Find every bin that changed host (not just from draining node)
+    for (const [host, bins] of Object.entries(result.assignments)) {
+      for (const b of bins) {
+        const prev = oldLoc[b];
+        if (prev && prev !== host) {
+          pool.migratingBins.add(b);
+          moved.push({ bin: b, to: host });
+          targetBins[host] = (targetBins[host] || 0) + 1;
+          totalMigrated++;
+          S.stats.warmMigrations++;
+        }
+      }
+    }
+
+    if (moved.length > 0 && S.mode === 'multi') {
+      const dist = {};
+      for (const m of moved) dist[m.to] = (dist[m.to] || 0) + 1;
+      const distStr = Object.entries(dist).map(([h, c]) => `${h}:${c}`).join(', ');
+      log('info', `  ${pool.name}: ${moved.length} bins → ${distStr}`);
+    }
+  }
+
+  if (totalMigrated > 0) {
+    if (S.mode === 'simple') {
+      const distStr = Object.entries(targetBins).map(([h, c]) => `${h}:${c}`).join(', ');
+      log('info', `  ${totalMigrated} bins redistributed → ${distStr}`);
+    }
+    const perTarget = Object.entries(targetBins).map(([name, count]) => {
+      const giB = count * S.cfg.binGiB;
+      const secs = (giB * 1024) / S.cfg.netMBs;
+      return { name, count, giB, secs };
+    }).sort((a, b) => b.secs - a.secs);
+
+    const targetSecs = perTarget.map(t => t.secs);
+    const minSecs = Math.min(...targetSecs);
+    const maxSecs = Math.max(...targetSecs);
+    const avgSecs = targetSecs.reduce((a, b) => a + b, 0) / targetSecs.length;
+
+    log('info', `  Warm-up per target:`);
+    for (const t of perTarget) {
+      log('info', `    ${t.name}: ${t.count} bins (${t.giB} GiB) → ${fmtTime(t.secs)}`);
+    }
+    log('info', `  Min: ${fmtTime(minSecs)}`);
+    log('info', `  Avg: ${fmtTime(avgSecs)}`);
+    log('info', `  Max: ${fmtTime(maxSecs)}`);
+
+    const fits = maxSecs <= 900;
+    if (!fits) log('drain', `  ⚠ Max ${fmtTime(maxSecs)} exceeds 15 min preStop window!`);
+    else log('warm', `  ✓ All targets fit in 15 min window`);
+
+    S.stats.lastDrainInfo = { nodeName: node.name, bottleneckSecs: maxSecs, placed: totalMigrated, targets: Object.keys(targetBins).length };
+  } else {
+    log('info', `  No bins to migrate`);
+    S.stats.lastDrainInfo = { nodeName: node.name, bottleneckSecs: 0, placed: 0, targets: 0 };
+  }
+
+  setBanner('warmup', `Warming up ${node.name}... Click "Next Step" to complete`);
+  updateNextLabel('Complete Warm-up');
+}
+
+function doWarmupComplete() {
+  const node = S.nodes[S.drainIdx];
+  const info = S.stats.lastDrainInfo;
+
+  for (const pool of S.pools) pool.migratingBins.clear();
+
+  if (info) S.stats.warmupTimes.push({ node: info.nodeName, secs: info.bottleneckSecs, bins: info.placed });
+
+  node.status = 'ready';
+  node.isNew = true;
+
+  for (const pool of S.pools) delete pool.assignments[node.name];
+
+  log('warm', `  ✓ ${node.name} warm-up complete → ${info ? info.placed : 0} bins warm on survivors`);
+  log('info', `  ${node.name} replacement online (empty)`);
+
+  S.drainIdx++;
+  node.isNew = false;
+
+  if (S.drainIdx < S.cfg.n) {
+    setBanner('ready', `${S.drainIdx}/${S.cfg.n} upgraded. Click "Next Step" to drain fleet-${S.drainIdx}`);
+    updateNextLabel(`Drain fleet-${S.drainIdx}`);
+  }
+}
+
+function finish() {
+  S.rounds++;
+  const times = S.stats.warmupTimes;
+  const roundTimes = times.slice(-S.cfg.n);
+  const secs = roundTimes.map(t => t.secs);
+  const minT = secs.length ? Math.min(...secs) : 0;
+  const maxT = secs.length ? Math.max(...secs) : 0;
+  const avgT = secs.length ? secs.reduce((a, b) => a + b, 0) / secs.length : 0;
+  const totalT = secs.reduce((a, b) => a + b, 0);
+
+  log('warm bold', `═══════════════════════════════════════`);
+  log('warm bold', `  ROUND ${S.rounds} COMPLETE`);
+  log('warm bold', `═══════════════════════════════════════`);
+  log('info', `  Nodes upgraded:       ${S.cfg.n}`);
+  log('info', `  Bins warm-migrated:   ${S.stats.warmMigrations}`);
+
+  if (S.mode === 'multi') {
+    log('warm bold', `  ── Per-Pool Stats ──`);
+    for (const pool of S.pools) {
+      const totalBins = Object.values(pool.assignments).reduce((s, b) => s + b.length, 0);
+      const expected = Math.ceil(pool.sizeGiB / S.cfg.binGiB);
+      log('info', `    ${pool.name}: ${totalBins}/${expected} bins placed`);
+    }
+  }
+
+  log('warm bold', `  ── Warm-up Time Per Node ──`);
+  for (const t of roundTimes) {
+    log('info', `    ${t.node}: ${fmtTime(t.secs)} (${t.bins} bins)`);
+  }
+  log('warm bold', `  ── Timing Summary ──`);
+  log('info', `    Min:   ${fmtTime(minT)}`);
+  log('info', `    Max:   ${fmtTime(maxT)}`);
+  log('info', `    Avg:   ${fmtTime(avgT)}`);
+  log('warm bold', `  Total upgrade time (sequential): ${fmtTime(totalT)}`);
+
+  S.drainIdx = 0;
+  S.stepIdx = 0;
+  for (const n of S.nodes) n.isNew = false;
+
+  setBanner('done', `Round ${S.rounds} done (${fmtTime(totalT)} total). Click "Next Step" for another round`);
+  updateNextLabel('Drain fleet-0 (round ' + (S.rounds + 1) + ')');
+}
+
+// ─── Rendering ────────────────────────────────────────────
+
+function nodeBinCount(nodeName) {
+  return S.pools.reduce((sum, p) => sum + (p.assignments[nodeName] || []).length, 0);
+}
+
+function getNodeBins(nodeName) {
+  const bins = [];
+  for (const pool of S.pools) {
+    for (const binId of (pool.assignments[nodeName] || [])) {
+      bins.push({
+        id: binId,
+        poolName: pool.name,
+        color: pool.color,
+        migrating: pool.migratingBins.has(binId),
+      });
+    }
+  }
+  return bins;
+}
+
+function renderPoolList() {
+  const el = document.getElementById('poolList');
+  if (S.mode === 'simple') { el.innerHTML = ''; return; }
+  if (S.pools.length === 0) {
+    el.innerHTML = '<div style="color:var(--text-dim);font-size:12px;padding:4px 0">No pools added yet</div>';
+    return;
+  }
+
+  const binGiB = S.initialized ? S.cfg.binGiB : (parseInt(document.getElementById('binSize').value) || 16);
+  el.innerHTML = S.pools.map(p => {
+    const binCount = Math.ceil(p.sizeGiB / binGiB);
+    return `<div class="pool-row">
+      <div class="pool-color" style="background:${p.color}"></div>
+      <span class="pool-name">${p.name}</span>
+      <span class="pool-info">${p.sizeGiB} GiB (${binCount} bins)</span>
+      <button class="btn-remove" onclick="removePool('${p.id}')" title="Remove pool">&times;</button>
+    </div>`;
+  }).join('');
+}
+
+function render() {
+  if (!S.initialized) return;
+
+  const totalBins = S.nodes.reduce((s, n) => s + nodeBinCount(n.name), 0);
+  const migBins = S.pools.reduce((s, p) => s + p.migratingBins.size, 0);
+  const peak = Math.max(0, ...S.nodes.map(n => nodeBinCount(n.name)));
+  const peakPct = S.cfg.cap ? (peak / S.cfg.cap * 100).toFixed(0) : 0;
+  const emptyNodes = S.nodes.filter(n => n.status === 'ready' && nodeBinCount(n.name) === 0).length;
+
+  const roundTimes = S.stats.warmupTimes.slice(-(S.drainIdx || 0));
+  const elapsedSecs = roundTimes.reduce((a, t) => a + t.secs, 0);
+  const elapsed = roundTimes.length > 0 ? fmtTime(elapsedSecs) : '--';
+
+  document.getElementById('summary').innerHTML = `
+    <div class="summary-card"><div class="summary-value">${totalBins}</div><div class="summary-label">Total Bins</div></div>
+    <div class="summary-card"><div class="summary-value" style="color:var(--migrating)">${migBins}</div><div class="summary-label">Migrating</div></div>
+    <div class="summary-card"><div class="summary-value" style="color:${peakPct>=100?'var(--danger)':peakPct>=90?'var(--migrating)':'var(--accent)'}">${peakPct}%</div><div class="summary-label">Peak Util</div></div>
+    <div class="summary-card"><div class="summary-value" style="color:var(--text-dim)">${emptyNodes}</div><div class="summary-label">Empty Nodes</div></div>
+    <div class="summary-card"><div class="summary-value" style="color:var(--drain)">${S.drainIdx}/${S.cfg.n}</div><div class="summary-label">Upgraded</div></div>
+    <div class="summary-card"><div class="summary-value" style="color:var(--accent)">${elapsed}</div><div class="summary-label">Elapsed</div></div>
+  `;
+
+  const legendEl = document.getElementById('legend');
+  let legendHtml = '';
+  if (S.mode === 'simple') {
+    legendHtml += `<div class="legend-item"><div class="legend-swatch" style="background:var(--warm)"></div> Warm</div>`;
+  } else {
+    for (const pool of S.pools) {
+      legendHtml += `<div class="legend-item"><div class="legend-swatch" style="background:${pool.color}"></div> ${pool.name}</div>`;
+    }
+  }
+  legendHtml += `<div class="legend-item"><div class="legend-swatch" style="background:var(--border)"></div> Empty</div>`;
+  legendHtml += `<div class="legend-item"><div class="legend-swatch" style="background:var(--migrating);animation:pulse 1.5s infinite"></div> Migrating</div>`;
+  legendEl.innerHTML = legendHtml;
+
+  const el = document.getElementById('fleet');
+  el.innerHTML = '';
+
+  for (const node of S.nodes) {
+    const card = document.createElement('div');
+    let cls = 'node-card';
+    if (node.status === 'draining') cls += ' draining';
+    else if (node.isNew && nodeBinCount(node.name) === 0) cls += ' replacement';
+    card.className = cls;
+
+    let sClass = 's-ready', sLabel = 'READY';
+    if (node.status === 'draining') { sClass = 's-draining'; sLabel = 'DRAINING'; }
+    else if (node.isNew && nodeBinCount(node.name) === 0) { sClass = 's-new'; sLabel = 'NEW'; }
+
+    const binTotal = nodeBinCount(node.name);
+
+    let barHtml = '';
+    for (const pool of S.pools) {
+      const count = (pool.assignments[node.name] || []).length;
+      if (count > 0) {
+        const segPct = (count / S.cfg.cap * 100);
+        barHtml += `<div class="cap-seg" style="width:${segPct}%;background:${pool.color}"></div>`;
+      }
+    }
+
+    const bins = getNodeBins(node.name);
+    let binsHtml = '';
+    for (const b of bins) {
+      const cls = b.migrating ? 'bin migrating' : 'bin';
+      binsHtml += `<div class="${cls}" style="background:${b.color}" title="${b.poolName} #${b.id}${b.migrating ? ' (migrating)' : ''}">${b.id}</div>`;
+    }
+    const emptySlots = S.cfg.cap - binTotal;
+    for (let i = 0; i < emptySlots; i++) {
+      binsHtml += `<div class="bin empty-slot"></div>`;
+    }
+
+    card.innerHTML = `
+      <div class="node-header"><span class="node-name">${node.name}</span><span class="node-status ${sClass}">${sLabel}</span></div>
+      <div class="capacity-text">${binTotal}/${S.cfg.cap}</div>
+      <div class="capacity-bar">${barHtml}</div>
+      <div class="bins-grid">${binsHtml}</div>
+    `;
+    el.appendChild(card);
+  }
+}
+
+// ─── Helpers ──────────────────────────────────────────────
+
+function fmtTime(secs) {
+  if (!secs || secs <= 0) return '0s';
+  if (secs < 60) return `${secs.toFixed(0)}s`;
+  const m = Math.floor(secs / 60);
+  const s = Math.round(secs % 60);
+  return s > 0 ? `${m}m ${s}s` : `${m}m`;
+}
+
+function setBanner(cls, text) {
+  const b = document.getElementById('phaseBanner');
+  b.className = 'phase-banner ' + cls;
+  b.textContent = text;
+}
+
+function updateNextLabel(text) {
+  document.getElementById('nextBtn').textContent = text;
+  document.getElementById('nextBtn').disabled = false;
+}
+
+function log(cls, msg) {
+  const el = document.getElementById('log');
+  const d = document.createElement('div');
+  d.className = 'log-entry ' + cls;
+  d.textContent = msg;
+  el.appendChild(d);
+  el.scrollTop = el.scrollHeight;
+}
+
+function clearLog() { document.getElementById('log').innerHTML = ''; }
+
+function resetAll() {
+  const mode = S.mode;
+  S = {
+    nodes: [], pools: [], cfg: {},
+    drainIdx: 0, stepIdx: 0,
+    stats: { drains: 0, warmMigrations: 0, warmupTimes: [], lastDrainInfo: null },
+    rounds: 0, poolIdCounter: 0, initialized: false, mode,
+  };
+  document.getElementById('fleet').innerHTML = '';
+  document.getElementById('summary').innerHTML = '';
+  document.getElementById('legend').innerHTML = '';
+  clearLog();
+  renderPoolList();
+  document.getElementById('nextBtn').disabled = true;
+  document.getElementById('nextBtn').textContent = 'Next Step';
+  document.getElementById('poolName').value = 'Pool A';
+  setBanner('idle', mode === 'simple'
+    ? 'Click Initialize to set up the fleet'
+    : 'Click Initialize to set up the fleet, then add pools');
+}
+
+// ─── Boot ─────────────────────────────────────────────────
+renderPoolList();
+</script>
+</body>
+</html>
