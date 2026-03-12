@@ -93,6 +93,34 @@
   .btn-primary { background: var(--accent); color: var(--bg); border-color: var(--accent); font-weight: 600; }
   .btn-next { background: var(--drain); color: var(--bg); border-color: var(--drain); font-weight: 600; font-size: 14px; padding: 10px 24px; }
   .btn-reset { background: transparent; color: var(--danger); border-color: var(--danger); }
+  .btn-run { background: #bc8cff; color: var(--bg); border-color: #bc8cff; font-weight: 600; }
+  .btn-stop { background: transparent; color: #bc8cff; border-color: #bc8cff; font-weight: 600; }
+
+  .gear-wrapper { position: relative; align-self: flex-end; }
+  .btn-gear {
+    background: transparent; color: var(--text-dim); border: 1px solid var(--border);
+    font-size: 16px; padding: 6px 10px; line-height: 1; cursor: pointer;
+    border-radius: 4px; font-family: inherit;
+  }
+  .btn-gear:hover { color: var(--text); border-color: var(--text-dim); }
+
+  .gear-popover {
+    display: none;
+    position: absolute;
+    right: 0;
+    top: calc(100% + 6px);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    z-index: 100;
+    min-width: 200px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  }
+  .gear-popover.open { display: block; }
+  .gear-popover .control-group { margin-bottom: 10px; }
+  .gear-popover .control-group:last-child { margin-bottom: 0; }
+  .gear-popover .control-group input { width: 80px; }
   .btn-add { background: var(--warm); color: var(--bg); border-color: var(--warm); font-weight: 600; }
   .btn-remove {
     background: transparent; color: var(--danger); border: none;
@@ -207,9 +235,9 @@
   .legend-swatch { width: 12px; height: 12px; border-radius: 2px; }
 
   .fleet-container {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
     gap: 8px;
-    flex-wrap: wrap;
     margin-bottom: 16px;
   }
 
@@ -218,9 +246,7 @@
     border: 2px solid var(--border);
     border-radius: 8px;
     padding: 10px;
-    min-width: 110px;
-    flex: 1;
-    max-width: 170px;
+    min-width: 0;
     transition: all 0.3s;
   }
 
@@ -302,6 +328,43 @@
   .log-entry.warm { color: var(--warm); }
   .log-entry.info { color: var(--accent); }
   .log-entry.bold { font-weight: 700; }
+
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-overlay.visible { display: flex; }
+
+  .modal-box {
+    background: var(--surface);
+    border: 1px solid var(--migrating);
+    border-radius: 10px;
+    padding: 24px 28px;
+    max-width: 480px;
+    width: 90%;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .modal-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--migrating);
+    margin-bottom: 10px;
+  }
+
+  .modal-body {
+    font-size: 12px;
+    color: var(--text-dim);
+    line-height: 1.7;
+    margin-bottom: 18px;
+  }
+
+  .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
 </style>
 </head>
 <body>
@@ -318,7 +381,7 @@
     </div>
     <div class="control-group">
       <label>Nodes</label>
-      <input type="number" id="numNodes" value="5" min="2" max="30">
+      <input type="number" id="numNodes" value="25" min="2" max="1000">
     </div>
     <div class="control-group">
       <label>Instance (GiB)</label>
@@ -336,9 +399,32 @@
       <label>Net MB/s</label>
       <input type="number" id="netSpeed" value="260" min="50" max="5000">
     </div>
-    <button class="btn-primary" onclick="initFleet()">Initialize</button>
+    <div class="control-group">
+      <label>Max Warmup (min)</label>
+      <input type="number" id="maxWarmupMin" value="15" min="1" max="120">
+    </div>
+    <button class="btn-primary" onclick="initFleet()" id="initBtn">Initialize</button>
     <button class="btn-next" onclick="nextStep()" id="nextBtn" disabled>Next Step</button>
+    <button class="btn-run" onclick="runSimulation()" id="runBtn" disabled>Run Simulation</button>
     <button class="btn-reset" onclick="resetAll()">Reset</button>
+    <div class="gear-wrapper">
+      <button class="btn-gear" onclick="toggleGear()" title="Simulation settings">&#9881;</button>
+      <div class="gear-popover" id="gearPopover">
+        <span class="section-title">Simulation Speed</span>
+        <div class="control-group">
+          <label>Drain Delay (ms)</label>
+          <input type="number" id="delayDrain" value="150" min="0" max="5000" step="50">
+        </div>
+        <div class="control-group">
+          <label>Warmup Delay (ms)</label>
+          <input type="number" id="delayWarmup" value="250" min="0" max="5000" step="50">
+        </div>
+        <div class="control-group">
+          <label>Step Delay (ms)</label>
+          <input type="number" id="delayStep" value="150" min="0" max="5000" step="50">
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -369,6 +455,17 @@
 <div class="log-label">Event Log</div>
 <div class="log" id="log"></div>
 
+<div class="modal-overlay" id="warmupModal">
+  <div class="modal-box">
+    <div class="modal-title">Warm-up Threshold Exceeded</div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-actions">
+      <button class="btn-reset" id="modalStop">Stop</button>
+      <button class="btn-next" id="modalContinue" style="font-size:13px;padding:8px 16px">Continue</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const POOL_COLORS = [
   '#58a6ff', '#f0883e', '#bc8cff', '#3fb950', '#f85149',
@@ -389,6 +486,8 @@ let S = {
   poolIdCounter: 0,
   initialized: false,
   mode: 'simple',
+  running: false,
+  stopRequested: false,
 };
 
 function setMode(m) {
@@ -407,10 +506,10 @@ function setMode(m) {
 // ─── Scheduler (port of scheduler.go) ─────────────────────
 
 function selectHosts(currentBins, available, targetCount) {
-  if (targetCount >= available.length) return [...available].sort();
+  if (targetCount >= available.length) return [...available];
   const scores = available.map(h => ({ name: h, count: (currentBins[h] || []).length }));
   scores.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
-  return scores.slice(0, targetCount).map(s => s.name).sort();
+  return scores.slice(0, targetCount).map(s => s.name);
 }
 
 function computeBinPlacement(input) {
@@ -558,7 +657,8 @@ function schedulePool(pool, isDrain) {
 
   const availableHosts = S.nodes
     .filter(n => n.status === 'ready')
-    .map(n => n.name);
+    .map(n => n.name)
+    .sort((a, b) => nodeBinCount(a) - nodeBinCount(b) || a.localeCompare(b));
   const drainingHosts = S.nodes
     .filter(n => n.status === 'draining')
     .map(n => n.name);
@@ -615,11 +715,13 @@ function initFleet() {
   const binGiB = parseInt(document.getElementById('binSize').value) || 16;
   const reservePct = parseInt(document.getElementById('reservePct').value) || 15;
   const netMBs = parseInt(document.getElementById('netSpeed').value) || 260;
+  const maxWarmupMin = parseInt(document.getElementById('maxWarmupMin').value) || 15;
+  const maxWarmupSecs = maxWarmupMin * 60;
 
   const cap = Math.floor(instanceGiB / binGiB);
   const effectiveCap = Math.floor(cap * (1 - reservePct / 100));
 
-  S.cfg = { n, instanceGiB, binGiB, reservePct, netMBs, cap, effectiveCap };
+  S.cfg = { n, instanceGiB, binGiB, reservePct, netMBs, cap, effectiveCap, maxWarmupSecs };
   S.nodes = [];
   S.drainIdx = 0;
   S.stepIdx = 0;
@@ -673,6 +775,7 @@ function initFleet() {
   }
   document.getElementById('nextBtn').disabled = false;
   document.getElementById('nextBtn').textContent = 'Drain fleet-0';
+  document.getElementById('runBtn').disabled = false;
 
   renderPoolList();
   render();
@@ -700,39 +803,38 @@ function doDrain() {
   node.status = 'draining';
   S.stats.drains++;
 
-  // Snapshot old assignments so we can detect ALL bins that changed host
-  const oldLocations = {};
-  for (const pool of S.pools) {
-    const loc = {};
-    for (const [host, bins] of Object.entries(pool.assignments)) {
-      for (const b of bins) loc[b] = host;
-    }
-    oldLocations[pool.id] = loc;
-  }
-
-  const results = scheduleAllPools(true);
-
+  const targets = S.nodes.filter(n => n.status === 'ready');
   const targetBins = {};
   let totalMigrated = 0;
 
   log('drain bold', `── DRAIN ${node.name} ──`);
 
-  for (const { pool, result } of results) {
-    const oldLoc = oldLocations[pool.id];
-    const moved = [];
+  for (const pool of S.pools) {
+    const displaced = [...(pool.assignments[node.name] || [])];
+    delete pool.assignments[node.name];
+    if (displaced.length === 0) continue;
 
-    // Find every bin that changed host (not just from draining node)
-    for (const [host, bins] of Object.entries(result.assignments)) {
-      for (const b of bins) {
-        const prev = oldLoc[b];
-        if (prev && prev !== host) {
-          pool.migratingBins.add(b);
-          moved.push({ bin: b, to: host });
-          targetBins[host] = (targetBins[host] || 0) + 1;
+    const moved = [];
+    let di = 0;
+    while (di < displaced.length) {
+      let anyPlaced = false;
+      targets.sort((a, b) => nodeBinCount(a.name) - nodeBinCount(b.name));
+      for (const t of targets) {
+        if (di >= displaced.length) break;
+        if (nodeBinCount(t.name) < S.cfg.cap) {
+          const binId = displaced[di];
+          if (!pool.assignments[t.name]) pool.assignments[t.name] = [];
+          pool.assignments[t.name].push(binId);
+          pool.migratingBins.add(binId);
+          moved.push({ bin: binId, to: t.name });
+          targetBins[t.name] = (targetBins[t.name] || 0) + 1;
           totalMigrated++;
           S.stats.warmMigrations++;
+          di++;
+          anyPlaced = true;
         }
       }
+      if (!anyPlaced) break;
     }
 
     if (moved.length > 0 && S.mode === 'multi') {
@@ -767,9 +869,9 @@ function doDrain() {
     log('info', `  Avg: ${fmtTime(avgSecs)}`);
     log('info', `  Max: ${fmtTime(maxSecs)}`);
 
-    const fits = maxSecs <= 900;
-    if (!fits) log('drain', `  ⚠ Max ${fmtTime(maxSecs)} exceeds 15 min preStop window!`);
-    else log('warm', `  ✓ All targets fit in 15 min window`);
+    const fits = maxSecs <= S.cfg.maxWarmupSecs;
+    if (!fits) log('drain', `  ⚠ Max ${fmtTime(maxSecs)} exceeds ${fmtTime(S.cfg.maxWarmupSecs)} preStop window!`);
+    else log('warm', `  ✓ All targets fit in ${fmtTime(S.cfg.maxWarmupSecs)} window`);
 
     S.stats.lastDrainInfo = { nodeName: node.name, bottleneckSecs: maxSecs, placed: totalMigrated, targets: Object.keys(targetBins).length };
   } else {
@@ -847,6 +949,132 @@ function finish() {
 
   setBanner('done', `Round ${S.rounds} done (${fmtTime(totalT)} total). Click "Next Step" for another round`);
   updateNextLabel('Drain fleet-0 (round ' + (S.rounds + 1) + ')');
+}
+
+// ─── Run Simulation (auto-run) ────────────────────────────
+
+function setControlsEnabled(enabled) {
+  document.getElementById('nextBtn').disabled = !enabled;
+  document.getElementById('initBtn').disabled = !enabled;
+  updateRunButton();
+}
+
+function updateRunButton() {
+  const btn = document.getElementById('runBtn');
+  if (S.running) {
+    btn.textContent = 'Stop';
+    btn.className = 'btn-stop';
+    btn.disabled = false;
+  } else {
+    btn.textContent = 'Run Simulation';
+    btn.className = 'btn-run';
+    btn.disabled = !S.initialized;
+  }
+}
+
+function showWarmupWarning(nodeName, warmupSecs) {
+  return new Promise(resolve => {
+    const overlay = document.getElementById('warmupModal');
+    const body = document.getElementById('modalBody');
+    body.innerHTML =
+      `<strong>${nodeName}</strong> warm-up time is <strong>${fmtTime(warmupSecs)}</strong>, ` +
+      `which exceeds the configured threshold of <strong>${fmtTime(S.cfg.maxWarmupSecs)}</strong>.<br><br>` +
+      `Do you want to continue the simulation or stop here?`;
+    overlay.classList.add('visible');
+
+    const onContinue = () => { cleanup(); resolve(true); };
+    const onStop = () => { cleanup(); resolve(false); };
+    const cleanup = () => {
+      overlay.classList.remove('visible');
+      document.getElementById('modalContinue').removeEventListener('click', onContinue);
+      document.getElementById('modalStop').removeEventListener('click', onStop);
+    };
+
+    document.getElementById('modalContinue').addEventListener('click', onContinue);
+    document.getElementById('modalStop').addEventListener('click', onStop);
+  });
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function getDelays() {
+  return {
+    drain: parseInt(document.getElementById('delayDrain').value) || 0,
+    warmup: parseInt(document.getElementById('delayWarmup').value) || 0,
+    step: parseInt(document.getElementById('delayStep').value) || 0,
+  };
+}
+
+function toggleGear() {
+  document.getElementById('gearPopover').classList.toggle('open');
+}
+
+document.addEventListener('click', (e) => {
+  const wrapper = document.querySelector('.gear-wrapper');
+  if (wrapper && !wrapper.contains(e.target)) {
+    document.getElementById('gearPopover').classList.remove('open');
+  }
+});
+
+function stopSimulation() {
+  S.stopRequested = true;
+}
+
+async function runSimulation() {
+  if (!S.initialized) return;
+  if (S.running) { stopSimulation(); return; }
+
+  S.running = true;
+  S.stopRequested = false;
+  setControlsEnabled(false);
+  const delays = getDelays();
+
+  while (S.drainIdx < S.cfg.n) {
+    if (S.stopRequested) {
+      S.running = false;
+      S.stopRequested = false;
+      setBanner('warmup', `Simulation stopped. Click "Next Step" to continue manually`);
+      setControlsEnabled(true);
+      updateNextLabel(S.stepIdx % 2 === 0 ? `Drain fleet-${S.drainIdx}` : 'Complete Warm-up');
+      return;
+    }
+
+    const nodeIdx = S.drainIdx;
+
+    setBanner('warmup', `Running simulation... draining fleet-${nodeIdx} (${nodeIdx + 1}/${S.cfg.n})`);
+    await sleep(Math.max(delays.drain, 1));
+
+    doDrain();
+    S.stepIdx++;
+    render();
+    setBanner('warmup', `Running simulation... warming fleet-${nodeIdx} (${nodeIdx + 1}/${S.cfg.n})`);
+    await sleep(Math.max(delays.warmup, 1));
+
+    const info = S.stats.lastDrainInfo;
+    if (info && info.bottleneckSecs > S.cfg.maxWarmupSecs) {
+      const shouldContinue = await showWarmupWarning(info.nodeName, info.bottleneckSecs);
+      if (!shouldContinue) {
+        S.running = false;
+        setBanner('warmup', `Simulation stopped at fleet-${nodeIdx}. Click "Next Step" to continue manually`);
+        setControlsEnabled(true);
+        updateNextLabel('Complete Warm-up');
+        return;
+      }
+    }
+
+    doWarmupComplete();
+    S.stepIdx++;
+    render();
+    await sleep(Math.max(delays.step, 1));
+
+    if (S.drainIdx >= S.cfg.n) {
+      finish();
+      render();
+    }
+  }
+
+  S.running = false;
+  setControlsEnabled(true);
 }
 
 // ─── Rendering ────────────────────────────────────────────
@@ -1010,7 +1238,7 @@ function resetAll() {
     nodes: [], pools: [], cfg: {},
     drainIdx: 0, stepIdx: 0,
     stats: { drains: 0, warmMigrations: 0, warmupTimes: [], lastDrainInfo: null },
-    rounds: 0, poolIdCounter: 0, initialized: false, mode,
+    rounds: 0, poolIdCounter: 0, initialized: false, mode, running: false, stopRequested: false,
   };
   document.getElementById('fleet').innerHTML = '';
   document.getElementById('summary').innerHTML = '';
@@ -1019,6 +1247,7 @@ function resetAll() {
   renderPoolList();
   document.getElementById('nextBtn').disabled = true;
   document.getElementById('nextBtn').textContent = 'Next Step';
+  updateRunButton();
   document.getElementById('poolName').value = 'Pool A';
   setBanner('idle', mode === 'simple'
     ? 'Click Initialize to set up the fleet'
