@@ -954,7 +954,8 @@ function render() {
     let binsHtml = '';
     for (const b of bins) {
       const cls = b.migrating ? 'bin migrating' : 'bin';
-      binsHtml += `<div class="${cls}" style="background:${b.color}" title="${b.poolName} #${b.id}${b.migrating ? ' (migrating)' : ''}">${b.id}</div>`;
+      const color = (b.migrating && S.mode === 'simple') ? 'var(--migrating)' : b.color;
+      binsHtml += `<div class="${cls}" style="background:${color}" title="${b.poolName} #${b.id}${b.migrating ? ' (migrating)' : ''}">${b.id}</div>`;
     }
     const emptySlots = S.cfg.cap - binTotal;
     for (let i = 0; i < emptySlots; i++) {
